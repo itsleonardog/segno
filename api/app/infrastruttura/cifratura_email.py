@@ -26,6 +26,9 @@ class EmailNonDecifrabile(ValueError):  # noqa: N818
 
 
 class EmailCipher(Protocol):
+    @property
+    def key_id_corrente(self) -> str: ...
+
     def cifra(self, email: str) -> tuple[bytes, str]:
         """Restituisce il ciphertext e il key_id della chiave usata."""
         ...
@@ -43,6 +46,10 @@ class CifrarioEmailEnvelope:
             raise ValueError("La KEK deve essere di 32 byte per AES-256-GCM.")
         self._aead = AESGCM(chiave)
         self._key_id = key_id
+
+    @property
+    def key_id_corrente(self) -> str:
+        return self._key_id
 
     def cifra(self, email: str) -> tuple[bytes, str]:
         nonce = os.urandom(NONCE_BYTE)

@@ -29,6 +29,12 @@ RADICE_APP = Path(__file__).resolve().parents[1] / "app"
 PATTERN_AMBITO_SISTEMA = re.compile(
     r"access_scope\s*=\s*['\"]system['\"]|scope\s*=\s*['\"]system['\"]"
 )
+# L'ambito system è ammesso solo fuori dal ciclo di richiesta: autenticazione
+# (lookup prima del tenant) e worker dell'outbox (legge tutti gli eventi).
+FILE_CON_AMBITO_SISTEMA_AMMESSI = {
+    "app/presentazione/auth.py",
+    "app/worker.py",
+}
 
 
 class HandlerCatturaLog(logging.Handler):
@@ -457,7 +463,7 @@ async def test_nessuna_email_in_log(
     )
 
 
-def test_scope_system_solo_in_auth() -> None:
+def test_scope_system_solo_nei_punti_previsti() -> None:
     file_con_ambito_sistema = {
         percorso.relative_to(RADICE_APP.parent).as_posix()
         for percorso in RADICE_APP.rglob("*.py")
@@ -467,4 +473,4 @@ def test_scope_system_solo_in_auth() -> None:
         )
     }
 
-    assert file_con_ambito_sistema == {"app/presentazione/auth.py"}
+    assert file_con_ambito_sistema == FILE_CON_AMBITO_SISTEMA_AMMESSI

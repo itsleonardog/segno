@@ -20,6 +20,9 @@ async def crea_comune(
     *,
     confine: str,
     priorita: int = 0,
+    dispatch_mode: str = "email",
+    open311_endpoint_url: str | None = None,
+    open311_api_key_ref: str | None = None,
 ) -> uuid.UUID:
     identificativo = genera_identificativo_uuid7()
     suffisso = identificativo.hex[:12]
@@ -27,12 +30,14 @@ async def crea_comune(
         text("""
             INSERT INTO municipality (
                 id, slug, name, istat_code, region, timezone, locale,
-                boundary, dispatch_mode, priority
+                boundary, dispatch_mode, open311_endpoint_url,
+                open311_api_key_ref, priority
             )
             VALUES (
                 CAST(:id AS uuid), :slug, :nome, :istat, 'Lombardia',
                 'Europe/Rome', 'it', ST_GeogFromText(:confine),
-                CAST('email' AS dispatch_mode), :priorita
+                CAST(:dispatch_mode AS dispatch_mode), :endpoint_open311,
+                :chiave_open311_ref, :priorita
             )
             """),
         {
@@ -42,6 +47,9 @@ async def crea_comune(
             "istat": f"ISTAT-{suffisso}",
             "confine": confine,
             "priorita": priorita,
+            "dispatch_mode": dispatch_mode,
+            "endpoint_open311": open311_endpoint_url,
+            "chiave_open311_ref": open311_api_key_ref,
         },
     )
     return identificativo
@@ -80,17 +88,21 @@ async def crea_servizio(
     *,
     municipality_id: uuid.UUID,
     category_id: str,
-    codice_open311: str = "SERVIZIO-1",
+    codice_open311: str | None = "SERVIZIO-1",
+    fallback_email_enc: bytes | None = None,
+    fallback_active: bool = False,
 ) -> uuid.UUID:
     identificativo = genera_identificativo_uuid7()
     await connessione.execute(
         text("""
             INSERT INTO municipality_service (
-                id, municipality_id, category_id, open311_service_code
+                id, municipality_id, category_id, open311_service_code,
+                fallback_email_enc, fallback_active
             )
             VALUES (
                 CAST(:id AS uuid), CAST(:municipality_id AS uuid),
-                CAST(:category_id AS uuid), :codice_open311
+                CAST(:category_id AS uuid), :codice_open311,
+                :fallback_email_enc, :fallback_active
             )
             """),
         {
@@ -98,6 +110,8 @@ async def crea_servizio(
             "municipality_id": str(municipality_id),
             "category_id": category_id,
             "codice_open311": codice_open311,
+            "fallback_email_enc": fallback_email_enc,
+            "fallback_active": fallback_active,
         },
     )
     return identificativo
@@ -209,6 +223,7 @@ async def crea_evento_outbox(
     *,
     tenant_id: uuid.UUID | None,
     event_type: str = "report.created",
+    aggregate_id: uuid.UUID | None = None,
 ) -> uuid.UUID:
     identificativo = genera_identificativo_uuid7()
     await connessione.execute(
@@ -223,7 +238,7 @@ async def crea_evento_outbox(
             """),
         {
             "id": str(identificativo),
-            "aggregate_id": str(identificativo),
+            "aggregate_id": str(aggregate_id or identificativo),
             "event_type": event_type,
             "tenant_id": str(tenant_id) if tenant_id else None,
         },

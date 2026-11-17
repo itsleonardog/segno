@@ -6,6 +6,7 @@ from app.infrastruttura.cifratura_email import (
 )
 from app.infrastruttura.configurazione import (
     decodifica_segreto_base64,
+    leggi_configurazione_dispatch,
     leggi_configurazione_sicurezza,
 )
 from app.infrastruttura.email_sender import EmailSender, LoggingEmailSender
@@ -33,4 +34,8 @@ def get_pepper_lookup_email() -> bytes:
 
 def get_email_sender() -> EmailSender:
     configurazione = leggi_configurazione_sicurezza()
-    return LoggingEmailSender(ambiente=configurazione.ambiente)
+    configurazione_dispatch = leggi_configurazione_dispatch()
+    return LoggingEmailSender(
+        ambiente=configurazione.ambiente,
+        indirizzo_mittente=configurazione_dispatch.indirizzo_mittente,
+    )

@@ -24,8 +24,9 @@ make setup
 ```
 
 Il comando crea l'ambiente uv, installa le dipendenze del workspace npm e
-registra gli hook di pre-commit. In questa fase non esiste ancora un server
-applicativo: la toolchain prepara e verifica il repository.
+registra gli hook di pre-commit. L'API si avvia con
+`cd api && uv run uvicorn app.main:app --reload`; il worker di dispatch è
+descritto più sotto.
 
 ## Comandi
 
@@ -55,6 +56,21 @@ Per applicare lo schema:
 ```bash
 cd api && CIVIC_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:55432/civic_test uv run alembic upgrade head
 ```
+
+## Worker di dispatch
+
+Il relay dell'outbox gira come processo separato dal server HTTP:
+
+```bash
+cd api && uv run python -m app.worker
+```
+
+Il polling legge `outbox_event` con `FOR UPDATE SKIP LOCKED` in ambito di
+sistema, applica la regola di dispatch del comune e rispetta il backoff
+registrato in `report_dispatch.next_attempt_at`. Le variabili di ambiente
+rilevanti sono `CIVIC_DATABASE_URL_APP`, `CIVIC_WORKER_PAUSA_SECONDI`,
+`CIVIC_URL_PUBBLICA_BASE`, `CIVIC_EMAIL_MITTENTE`, `CIVIC_EMAIL_KEK` e
+`CIVIC_OPEN311_KEY_<RIFERIMENTO>` per le API key dei comuni.
 
 ## Stile del codice
 
