@@ -29,6 +29,7 @@ TABELLE_DA_SVUOTARE = (
     "refresh_token",
     "email_verification_token",
     "password_reset_token",
+    "idempotency_record",
     "report",
     "municipality_service",
     "user",
