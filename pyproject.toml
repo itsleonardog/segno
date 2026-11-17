@@ -1,0 +1,44 @@
+[project]
+name = "civic-reporting"
+version = "0.1.0"
+description = "Piattaforma di segnalazione civica multi-comune."
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["api"]
+
+[dependency-groups]
+dev = [
+    "black>=24.10",
+    "pre-commit>=4.0",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+src = ["api"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "B", "SIM", "UP", "C90"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.black]
+target-version = ["py312"]
+line-length = 88
+extend-exclude = "web|node_modules|\\.venv"
+
+[tool.pytest.ini_options]
+testpaths = ["api/tests"]
+pythonpath = ["api"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"

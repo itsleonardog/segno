@@ -1,0 +1,11 @@
+{
+  "name": "civic-reporting",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["web"],
+  "scripts": {
+    "lint": "npm run lint --workspace web",
+    "format": "npm run format --workspace web",
+    "format:check": "npm run format:check --workspace web"
+  }
+}
