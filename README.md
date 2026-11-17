@@ -26,7 +26,11 @@ make setup
 Il comando crea l'ambiente uv, installa le dipendenze del workspace npm e
 registra gli hook di pre-commit. L'API si avvia con
 `cd api && uv run uvicorn app.main:app --reload`; il worker di dispatch è
-descritto più sotto.
+descritto più sotto. Il frontend si avvia con `npm run dev --workspace web` e
+risponde su `http://localhost:3000`. Per impostazione predefinita chiama
+`http://localhost:8000`; imposta `NEXT_PUBLIC_API_URL` in `web/.env.local` per
+puntare a un'altra API. Le origini ammesse dal backend si configurano con
+`CIVIC_CORS_ORIGINS`.
 
 ## Comandi
 
@@ -36,6 +40,8 @@ descritto più sotto.
 | `make format` | Applica ruff, black, prettier ed eslint --fix |
 | `make lint` | Verifica ruff, black, eslint e prettier senza modificare i file |
 | `make test` | Esegue pytest; i test di database si saltano se PostGIS non è attivo |
+| `make web-dev` | Avvia Next.js in sviluppo su `localhost:3000` |
+| `make web-build` | Compila il frontend per la produzione |
 | `make test-db-up` | Avvia PostgreSQL 16 con PostGIS su `localhost:55432` |
 | `make test-database` | Avvia il database di test ed esegue pytest |
 | `make test-db-down` | Ferma il database di test e rimuove i volumi |
@@ -56,6 +62,22 @@ Per applicare lo schema:
 ```bash
 cd api && CIVIC_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:55432/civic_test uv run alembic upgrade head
 ```
+
+## Frontend
+
+Il frontend usa Next.js App Router, TypeScript, Tailwind CSS e Leaflet con
+OpenStreetMap. Le pagine sono la mappa pubblica (`/`), il form di segnalazione
+(`/report`), il dettaglio (`/reports/[public_ref]`), l'accesso (`/login`) e la
+registrazione (`/register`). Lo stato di autenticazione è gestito da un
+`AuthContext` che conserva i token in `localStorage` e ricarica il profilo da
+`GET /v1/me`.
+
+Variabili di ambiente rilevanti:
+
+- `NEXT_PUBLIC_API_URL`: URL base dell'API, predefinito
+  `http://localhost:8000`.
+- `CIVIC_CORS_ORIGINS`: origini ammesse dal backend, separate da virgola,
+  predefinito `http://localhost:3000`.
 
 ## Worker di dispatch
 

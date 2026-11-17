@@ -1,5 +1,5 @@
 .PHONY: setup format format-python format-web lint lint-python lint-web test \
-	test-db-up test-db-down test-database
+	web-dev web-build test-db-up test-db-down test-database
 
 setup:
 	uv sync --all-packages
@@ -27,6 +27,12 @@ lint-web:
 
 test:
 	uv run pytest
+
+web-dev:
+	npm run dev --workspace web
+
+web-build:
+	npm run build --workspace web
 
 test-db-up:
 	docker compose up -d --wait database-test

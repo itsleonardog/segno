@@ -17,6 +17,7 @@ URL_PUBBLICA_PREDEFINITA = "https://segnalazioni.example"
 MITTENTE_PREDEFINITO = "segnalazioni@segno.example"
 PAUSA_WORKER_PREDEFINITA_SECONDI = 5.0
 PREFISSO_SEGRETO_OPEN311_PREDEFINITO = "CIVIC_OPEN311_KEY_"
+ORIGINI_CORS_PREDEFINITE = "http://localhost:3000"
 
 # In dev la KEK e il pepper sono derivati da costanti note: il materiale di
 # chiave reale arriva dal KMS in Fase 5 e non deve mai essere versionato.
@@ -96,6 +97,12 @@ def leggi_configurazione_dispatch() -> ConfigurazioneDispatch:
             "CIVIC_OPEN311_KEY_PREFISSO", PREFISSO_SEGRETO_OPEN311_PREDEFINITO
         ),
     )
+
+
+def leggi_origini_consentite() -> tuple[str, ...]:
+    """Restituisce le origini ammesse per le richieste provenienti dal browser."""
+    valore = os.environ.get("CIVIC_CORS_ORIGINS", ORIGINI_CORS_PREDEFINITE)
+    return tuple(origine.strip() for origine in valore.split(",") if origine.strip())
 
 
 def decodifica_segreto_base64(valore: str, nome: str) -> bytes:
