@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
+import httpx
 import pytest
 import pytest_asyncio
+from aiuto_autenticazione import EmailSenderFinto, crea_app_di_test
 from ambiente_database import (
     PASSWORD_APPLICAZIONE,
     PASSWORD_MIGRATORE,
@@ -68,6 +70,25 @@ async def motore_applicazione(database_migrato: None) -> AsyncIterator[AsyncEngi
         await connessione.execute(text("SELECT 1"))
     yield motore
     await motore.dispose()
+
+
+@pytest_asyncio.fixture
+async def invio_email_finto() -> EmailSenderFinto:
+    return EmailSenderFinto()
+
+
+@pytest_asyncio.fixture
+async def client_auth(
+    motore_applicazione: AsyncEngine,
+    invio_email_finto: EmailSenderFinto,
+) -> AsyncIterator[httpx.AsyncClient]:
+    applicazione = crea_app_di_test(motore_applicazione, invio_email_finto)
+    trasporto = httpx.ASGITransport(app=applicazione)
+    async with httpx.AsyncClient(
+        transport=trasporto,
+        base_url="http://test",
+    ) as client:
+        yield client
 
 
 @pytest_asyncio.fixture(autouse=True)
