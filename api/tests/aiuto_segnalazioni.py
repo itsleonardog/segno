@@ -17,27 +17,38 @@ async def crea_utente_autenticato(
     motore: AsyncEngine,
     *,
     operatore: bool = False,
+    municipality_id: uuid.UUID | None = None,
+    email: str | None = None,
+    nickname: str | None = None,
 ) -> tuple[str, uuid.UUID]:
     suffisso = uuid.uuid4().hex[:10]
-    email = f"utente.{suffisso}@example.com"
-    nickname = f"utente_{suffisso}"
+    email_uso = email or f"utente.{suffisso}@example.com"
+    nickname_uso = nickname or f"utente_{suffisso}"
     registrazione = await registra_utente(
         client,
-        email=email,
-        nickname=nickname,
+        email=email_uso,
+        nickname=nickname_uso,
     )
     assert registrazione.status_code == 201, registrazione.text
     utente_id = uuid.UUID(registrazione.json()["id"])
-    if operatore:
+    if operatore or municipality_id is not None:
         async with motore.begin() as connessione:
             await connessione.execute(
                 text("""
-                    UPDATE "user" SET is_operatore = true
+                    UPDATE "user"
+                    SET is_operatore = :operatore,
+                        municipality_id = CAST(:municipality_id AS uuid)
                     WHERE id = CAST(:utente_id AS uuid)
                     """),
-                {"utente_id": str(utente_id)},
+                {
+                    "utente_id": str(utente_id),
+                    "operatore": operatore,
+                    "municipality_id": (
+                        str(municipality_id) if municipality_id else None
+                    ),
+                },
             )
-    accesso = await effettua_login(client, email=email)
+    accesso = await effettua_login(client, email=email_uso)
     assert accesso.status_code == 200, accesso.text
     return accesso.json()["access_token"], utente_id
 

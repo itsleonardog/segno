@@ -75,6 +75,8 @@ class RispostaMe(BaseModel):
     locale: str
     privacy_policy_version: str
     tos_version: str
+    is_operatore: bool
+    municipality_id: uuid.UUID | None
 
 
 class RichiestaAggiornamentoMe(BaseModel):

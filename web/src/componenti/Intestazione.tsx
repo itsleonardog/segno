@@ -4,6 +4,8 @@ import Link from 'next/link';
 
 import { usaAutenticazione } from '../contesti/ContestoAutenticazione';
 
+import { CampanellaNotifiche } from './CampanellaNotifiche';
+
 const STILE_COLLEGAMENTO_NEUTRO =
   'rounded-md px-3 py-2 text-slate-700 hover:bg-slate-100';
 
@@ -25,6 +27,12 @@ export function Intestazione() {
           </Link>
           {isCaricamento ? null : profilo ? (
             <>
+              <CampanellaNotifiche />
+              {profilo.isOperatore ? (
+                <Link href="/admin" className={STILE_COLLEGAMENTO_NEUTRO}>
+                  Pannello operatore
+                </Link>
+              ) : null}
               <span className="px-2 text-slate-600">{profilo.nickname}</span>
               <button
                 type="button"

@@ -16,6 +16,7 @@ SEGRETO_JWT_PREDEFINITO = "civic-dev-jwt-secret-change-me-0123456789"
 URL_PUBBLICA_PREDEFINITA = "https://segnalazioni.example"
 MITTENTE_PREDEFINITO = "segnalazioni@segno.example"
 PAUSA_WORKER_PREDEFINITA_SECONDI = 5.0
+INTERVALLO_SINCRONIZZAZIONE_OPEN311_PREDEFINITO_SECONDI = 300.0
 PREFISSO_SEGRETO_OPEN311_PREDEFINITO = "CIVIC_OPEN311_KEY_"
 ORIGINI_CORS_PREDEFINITE = "http://localhost:3000"
 
@@ -50,6 +51,7 @@ class ConfigurazioneDispatch:
     url_pubblica_base: str
     indirizzo_mittente: str
     pausa_worker_secondi: float
+    intervallo_sincronizzazione_open311_secondi: float
     prefisso_segreto_open311: str
 
 
@@ -91,6 +93,12 @@ def leggi_configurazione_dispatch() -> ConfigurazioneDispatch:
             os.environ.get(
                 "CIVIC_WORKER_PAUSA_SECONDI",
                 str(PAUSA_WORKER_PREDEFINITA_SECONDI),
+            )
+        ),
+        intervallo_sincronizzazione_open311_secondi=float(
+            os.environ.get(
+                "CIVIC_OPEN311_SYNC_SECONDI",
+                str(INTERVALLO_SINCRONIZZAZIONE_OPEN311_PREDEFINITO_SECONDI),
             )
         ),
         prefisso_segreto_open311=os.environ.get(

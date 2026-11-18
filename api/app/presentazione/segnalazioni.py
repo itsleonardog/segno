@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.dominio.ciclo_vita_segnalazione import (
     ModificaScaduta,
+    registra_cambio_stato,
     valida_transizione_operatore,
     verifica_finestra_modifica,
 )
@@ -43,7 +44,6 @@ from app.infrastruttura.idempotenza import (
     completa_idempotenza,
 )
 from app.infrastruttura.middleware_auth import get_utente_autenticato
-from app.infrastruttura.outbox import inserisci_evento_outbox
 from app.presentazione.schemi_segnalazioni import (
     EventoStatoPubblico,
     RichiestaCambioStato,
@@ -57,7 +57,6 @@ from app.presentazione.schemi_segnalazioni import (
 router = APIRouter(tags=["segnalazioni"])
 
 ENDPOINT_CREAZIONE_SEGNALAZIONE = "/v1/reports"
-EVENTO_STATO_SEGNALAZIONE_CAMBIATO = "report.status_changed"
 LUNGHEZZA_MASSIMA_CHIAVE_IDEMPOTENZA = 255
 NOTA_MODIFICA_SEGNALAZIONE = "La segnalazione è stata modificata dall'autore."
 
@@ -252,35 +251,13 @@ async def cambia_stato_segnalazione(
     segnalazione = await _ricarica_segnalazione(connessione, report_id)
     stato_precedente = StatoSegnalazione(segnalazione.status)
     _valida_transizione(stato_precedente, richiesta.status)
-    await repository_segnalazioni.aggiorna_stato(
+    await registra_cambio_stato(
         connessione,
-        report_id=report_id,
-        stato=richiesta.status.value,
-    )
-    await repository_segnalazioni.inserisci_evento_stato(
-        connessione,
-        report_id=report_id,
-        municipality_id=segnalazione.municipality_id,
-        from_status=stato_precedente.value,
-        to_status=richiesta.status.value,
+        segnalazione,
+        richiesta.status,
         actor_type="municipality",
         actor_id=utente_id,
         note_public=richiesta.note_public,
-        is_public=True,
-    )
-    await inserisci_evento_outbox(
-        connessione,
-        aggregate_type="report",
-        aggregate_id=report_id,
-        event_type=EVENTO_STATO_SEGNALAZIONE_CAMBIATO,
-        payload={
-            "report_id": str(report_id),
-            "public_ref": segnalazione.public_ref,
-            "from_status": stato_precedente.value,
-            "to_status": richiesta.status.value,
-            "note_public": richiesta.note_public,
-        },
-        tenant_id=segnalazione.municipality_id,
     )
     aggiornata = await _ricarica_segnalazione(connessione, report_id)
     return _risposta_segnalazione(aggiornata)

@@ -25,6 +25,8 @@ type ProfiloApi = {
   id: string;
   nickname: string;
   email_masked: string;
+  is_operatore: boolean;
+  municipality_id: string | null;
 };
 
 type RegistrazioneApi = {
@@ -80,5 +82,7 @@ function mappaProfilo(profiloApi: ProfiloApi): ProfiloUtente {
     id: profiloApi.id,
     nickname: profiloApi.nickname,
     emailMascherata: profiloApi.email_masked,
+    isOperatore: profiloApi.is_operatore,
+    idComune: profiloApi.municipality_id,
   };
 }

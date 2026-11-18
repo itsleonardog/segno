@@ -2,13 +2,24 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Protocol
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from app.dominio.dispatch import EVENTO_SEGNALAZIONE_CREATA, EsitoElaborazione
+from app.dominio.dispatch import (
+    EVENTO_DISPATCH_RITENTATIVO,
+    EVENTO_SEGNALAZIONE_CREATA,
+    EsitoElaborazione,
+)
 from app.dominio.elaboratore_eventi import ElaboratoreEventi
+from app.dominio.elaboratore_notifiche import ElaboratoreNotifiche
+from app.dominio.notifica import EVENTO_STATO_SEGNALAZIONE_CAMBIATO
+from app.dominio.sincronizzazione_open311 import (
+    SincronizzatoreOpen311,
+    sincronizza_open311,
+)
 from app.infrastruttura.adattatore_open311 import (
     AdattatoreOpen311,
     SegretiOpen311DaAmbiente,
@@ -44,28 +55,44 @@ class GestoreEventi(Protocol):
 class GestoreEventiPredefinito:
     """Instrada gli eventi di segnalazione verso l'elaboratore di dominio."""
 
-    def __init__(self, elaboratore: ElaboratoreEventi) -> None:
+    def __init__(
+        self,
+        elaboratore: ElaboratoreEventi,
+        elaboratore_notifiche: ElaboratoreNotifiche | None = None,
+    ) -> None:
         self._elaboratore = elaboratore
+        self._elaboratore_notifiche = elaboratore_notifiche
 
     async def __call__(
         self,
         connessione: AsyncConnection,
         evento: EventoOutbox,
     ) -> EsitoElaborazione:
-        if evento.event_type != EVENTO_SEGNALAZIONE_CREATA:
-            logger.warning(
-                "outbox_event_type_ignored",
-                extra={
-                    "event_id": str(evento.id),
-                    "event_type": evento.event_type,
-                    "aggregate_type": evento.aggregate_type,
-                },
+        if evento.event_type in (
+            EVENTO_SEGNALAZIONE_CREATA,
+            EVENTO_DISPATCH_RITENTATIVO,
+        ):
+            return await self._elaboratore.elabora_evento_creazione_segnalazione(
+                connessione,
+                evento.aggregate_id,
             )
-            return EsitoElaborazione(stato_dispatch=STATO_EVENTO_IGNORATO)
-        return await self._elaboratore.elabora_evento_creazione_segnalazione(
-            connessione,
-            evento.aggregate_id,
+        if (
+            evento.event_type == EVENTO_STATO_SEGNALAZIONE_CAMBIATO
+            and self._elaboratore_notifiche is not None
+        ):
+            return await self._elaboratore_notifiche.elabora_evento_cambio_stato(
+                connessione,
+                evento.payload,
+            )
+        logger.warning(
+            "outbox_event_type_ignored",
+            extra={
+                "event_id": str(evento.id),
+                "event_type": evento.event_type,
+                "aggregate_type": evento.aggregate_type,
+            },
         )
+        return EsitoElaborazione(stato_dispatch=STATO_EVENTO_IGNORATO)
 
 
 async def elabora_eventi_in_sospeso(
@@ -133,9 +160,12 @@ async def ciclo_worker(
     *,
     pausa_secondi: float,
     limite: int = LIMITE_EVENTI_PER_CICLO,
+    sincronizzatore: SincronizzatoreOpen311 | None = None,
+    intervallo_sincronizzazione_secondi: float | None = None,
 ) -> None:
-    """Esegue il polling dell'outbox finché il processo non viene fermato."""
+    """Esegue il polling dell'outbox e la sincronizzazione Open311 periodica."""
     logger.info("worker_started", extra={"pausa_secondi": pausa_secondi})
+    prossima_sincronizzazione = 0.0
     while True:
         try:
             elaborati = await elabora_eventi_in_sospeso(
@@ -150,6 +180,24 @@ async def ciclo_worker(
             )
             await asyncio.sleep(pausa_secondi)
             continue
+        if (
+            sincronizzatore is not None
+            and intervallo_sincronizzazione_secondi is not None
+            and time.monotonic() >= prossima_sincronizzazione
+        ):
+            try:
+                await sincronizza_open311(
+                    lambda: transazione_con_contesto(motore, scope="system"),
+                    sincronizzatore,
+                )
+            except SQLAlchemyError as errore:
+                logger.error(
+                    "open311_sync_cycle_failed",
+                    extra={"error_type": type(errore).__name__},
+                )
+            prossima_sincronizzazione = (
+                time.monotonic() + intervallo_sincronizzazione_secondi
+            )
         if elaborati == 0:
             await asyncio.sleep(pausa_secondi)
 
@@ -157,16 +205,36 @@ async def ciclo_worker(
 def crea_gestore_predefinito(
     configurazione_dispatch: ConfigurazioneDispatch,
 ) -> GestoreEventiPredefinito:
+    adattatore = AdattatoreOpen311()
+    invio_email = get_email_sender()
+    cifrario_email = get_cifrario_email()
+    risolutore_chiavi = SegretiOpen311DaAmbiente(
+        configurazione_dispatch.prefisso_segreto_open311
+    )
     elaboratore = ElaboratoreEventi(
+        adattatore_open311=adattatore,
+        invio_email=invio_email,
+        cifrario_email=cifrario_email,
+        risolutore_chiavi=risolutore_chiavi,
+        url_pubblica_base=configurazione_dispatch.url_pubblica_base,
+    )
+    elaboratore_notifiche = ElaboratoreNotifiche(
+        invio_email=invio_email,
+        cifrario_email=cifrario_email,
+        url_pubblica_base=configurazione_dispatch.url_pubblica_base,
+    )
+    return GestoreEventiPredefinito(elaboratore, elaboratore_notifiche)
+
+
+def crea_sincronizzatore_predefinito(
+    configurazione_dispatch: ConfigurazioneDispatch,
+) -> SincronizzatoreOpen311:
+    return SincronizzatoreOpen311(
         adattatore_open311=AdattatoreOpen311(),
-        invio_email=get_email_sender(),
-        cifrario_email=get_cifrario_email(),
         risolutore_chiavi=SegretiOpen311DaAmbiente(
             configurazione_dispatch.prefisso_segreto_open311
         ),
-        url_pubblica_base=configurazione_dispatch.url_pubblica_base,
     )
-    return GestoreEventiPredefinito(elaboratore)
 
 
 async def esegui_worker() -> None:
@@ -178,6 +246,10 @@ async def esegui_worker() -> None:
             motore,
             crea_gestore_predefinito(configurazione_dispatch),
             pausa_secondi=configurazione_dispatch.pausa_worker_secondi,
+            sincronizzatore=crea_sincronizzatore_predefinito(configurazione_dispatch),
+            intervallo_sincronizzazione_secondi=(
+                configurazione_dispatch.intervallo_sincronizzazione_open311_secondi
+            ),
         )
     finally:
         await motore.dispose()

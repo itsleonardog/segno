@@ -14,7 +14,7 @@ from app.infrastruttura.configurazione import (
 from app.infrastruttura.database import crea_motore
 from app.infrastruttura.errori import registra_gestori_errori
 from app.infrastruttura.middleware_auth import MiddlewareAutenticazione
-from app.presentazione import auth, categorie, geo, me, segnalazioni
+from app.presentazione import admin, auth, categorie, geo, me, notifiche, segnalazioni
 
 DESCRIZIONE_APPLICAZIONE = "API della piattaforma di segnalazione civica multi-comune."
 METODI_CORS_CONSENTITI = ["GET", "POST", "PATCH", "OPTIONS"]
@@ -58,6 +58,8 @@ def crea_app(*, motore: AsyncEngine | None = None) -> FastAPI:
     applicazione.include_router(categorie.router, prefix="/v1")
     applicazione.include_router(geo.router, prefix="/v1")
     applicazione.include_router(segnalazioni.router, prefix="/v1")
+    applicazione.include_router(notifiche.router, prefix="/v1")
+    applicazione.include_router(admin.router, prefix="/v1")
     return applicazione
 
 

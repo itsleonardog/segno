@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import text
@@ -38,6 +39,17 @@ _SQL_SERVIZIO = """
     WHERE municipality_id = CAST(:municipality_id AS uuid)
       AND category_id = CAST(:category_id AS uuid)
 """
+
+
+@dataclass(frozen=True, slots=True)
+class DispatchDaSincronizzare:
+    report_id: uuid.UUID
+    municipality_id: uuid.UUID
+    public_ref: str
+    stato_interno: str
+    provider_request_id: str
+    endpoint_open311: str
+    api_key_ref: str | None
 
 
 async def carica_segnalazione(
@@ -218,3 +230,44 @@ async def aggiorna_stato_dispatch_segnalazione(
             """),
         {"report_id": str(report_id), "stato": stato},
     )
+
+
+async def elenca_dispatch_open311_sincronizzabili(
+    connessione: AsyncConnection,
+    *,
+    limite: int,
+) -> list[DispatchDaSincronizzare]:
+    """Restituisce i dispatch Open311 riusciti con una richiesta da sincronizzare."""
+    esito = await connessione.execute(
+        text("""
+            SELECT dispatch.report_id, dispatch.municipality_id,
+                   dispatch.provider_request_id, report.public_ref,
+                   report.status AS stato_interno,
+                   municipality.open311_endpoint_url,
+                   municipality.open311_api_key_ref
+            FROM report_dispatch AS dispatch
+            JOIN report ON report.id = dispatch.report_id
+            JOIN municipality ON municipality.id = dispatch.municipality_id
+            WHERE dispatch.channel = CAST('open311' AS dispatch_channel)
+              AND dispatch.status = CAST('succeeded' AS dispatch_attempt_status)
+              AND dispatch.provider_request_id IS NOT NULL
+              AND municipality.open311_endpoint_url IS NOT NULL
+              AND report.deleted_at IS NULL
+              AND report.status <> CAST('closed' AS report_status)
+            ORDER BY dispatch.succeeded_at NULLS LAST, dispatch.id
+            LIMIT :limite
+            """),
+        {"limite": limite},
+    )
+    return [
+        DispatchDaSincronizzare(
+            report_id=riga["report_id"],
+            municipality_id=riga["municipality_id"],
+            public_ref=riga["public_ref"],
+            stato_interno=riga["stato_interno"],
+            provider_request_id=riga["provider_request_id"],
+            endpoint_open311=riga["open311_endpoint_url"],
+            api_key_ref=riga["open311_api_key_ref"],
+        )
+        for riga in esito.mappings().all()
+    ]

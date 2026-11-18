@@ -16,6 +16,7 @@ MODALITA_EMAIL = "email"
 MODALITA_OPEN311_POI_EMAIL = "open311_then_email"
 
 EVENTO_SEGNALAZIONE_CREATA = "report.created"
+EVENTO_DISPATCH_RITENTATIVO = "report.dispatch_retry"
 
 STATO_INVIATA_OPEN311 = "sent_open311"
 STATO_INVIATA_EMAIL = "sent_email"
@@ -139,6 +140,15 @@ class AdattatoreOpen311(Protocol):
         payload: Mapping[str, str],
     ) -> RisultatoOpen311:
         """Invia il payload form-encoded e restituisce l'esito normalizzato."""
+        ...
+
+    async def recupera_stato_richiesta(
+        self,
+        endpoint_url: str,
+        api_key: str | None,
+        service_request_id: str,
+    ) -> str | None:
+        """Restituisce lo stato esterno della richiesta o None se non leggibile."""
         ...
 
 

@@ -105,4 +105,6 @@ def _risposta_me(utente: UtentePersistito, cifrario: EmailCipher) -> RispostaMe:
         locale=utente.locale,
         privacy_policy_version=utente.privacy_policy_version,
         tos_version=utente.tos_version,
+        is_operatore=utente.is_operatore,
+        municipality_id=utente.municipality_id,
     )

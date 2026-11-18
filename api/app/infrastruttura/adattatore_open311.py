@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Mapping
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 import httpx
 
@@ -86,6 +86,48 @@ class AdattatoreOpen311:
             errore=None,
         )
 
+    async def recupera_stato_richiesta(
+        self,
+        endpoint_url: str,
+        api_key: str | None,
+        service_request_id: str,
+    ) -> str | None:
+        """Restituisce lo stato esterno della richiesta o None se non leggibile."""
+        url_richiesta = (
+            f"{endpoint_url.rstrip('/')}/{quote(service_request_id, safe='')}"
+        )
+        parametri = {"api_key": api_key} if api_key else None
+        descrittore_endpoint = _descrittore_endpoint(endpoint_url)
+        timeout = httpx.Timeout(
+            self._timeout_lettura,
+            connect=self._timeout_connessione,
+        )
+        try:
+            async with httpx.AsyncClient(
+                timeout=timeout,
+                transport=self._trasporto,
+            ) as client:
+                risposta = await client.get(url_richiesta, params=parametri)
+        except httpx.HTTPError as errore:
+            logger.warning(
+                "open311_status_transport_error",
+                extra={
+                    **descrittore_endpoint,
+                    "error_type": type(errore).__name__,
+                },
+            )
+            return None
+        if not 200 <= risposta.status_code < 300:
+            logger.warning(
+                "open311_status_response_not_ok",
+                extra={
+                    **descrittore_endpoint,
+                    "status_code": risposta.status_code,
+                },
+            )
+            return None
+        return _estrai_stato_richiesta(risposta)
+
 
 class SegretiOpen311DaAmbiente:
     """Risolve le API key dal secret store d'ambiente, non dal database."""
@@ -137,6 +179,34 @@ def _classifica_causa_trasporto(errore: httpx.HTTPError) -> CausaErroreTrasporto
             return CausaErroreTrasporto.DNS
         return CausaErroreTrasporto.CONNESSIONE
     return CausaErroreTrasporto.CONNESSIONE
+
+
+def _estrai_stato_richiesta(risposta: httpx.Response) -> str | None:
+    try:
+        contenuto = risposta.json()
+    except ValueError:
+        logger.error(
+            "open311_status_response_not_json",
+            extra={"status_code": risposta.status_code},
+        )
+        return None
+    if isinstance(contenuto, list):
+        return _stato_da_elenco(contenuto)
+    if isinstance(contenuto, dict):
+        return _stato_valido(contenuto.get("status"))
+    return None
+
+
+def _stato_da_elenco(contenuto: list[object]) -> str | None:
+    if not contenuto or not isinstance(contenuto[0], dict):
+        return None
+    return _stato_valido(contenuto[0].get("status"))
+
+
+def _stato_valido(valore: object) -> str | None:
+    if isinstance(valore, str) and valore.strip():
+        return valore.strip()
+    return None
 
 
 def _estrai_service_request_id(risposta: httpx.Response) -> str | None:

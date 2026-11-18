@@ -195,17 +195,24 @@ async def crea_dispatch(
     report_id: uuid.UUID,
     municipality_id: uuid.UUID,
     attempt_no: int = 1,
+    channel: str = "email",
+    status: str = "queued",
+    provider_request_id: str | None = None,
 ) -> uuid.UUID:
     identificativo = genera_identificativo_uuid7()
     await connessione.execute(
         text("""
             INSERT INTO report_dispatch (
-                id, report_id, municipality_id, channel, attempt_no
+                id, report_id, municipality_id, channel, attempt_no, status,
+                provider_request_id
             )
             VALUES (
                 CAST(:id AS uuid), CAST(:report_id AS uuid),
-                CAST(:municipality_id AS uuid), CAST('email' AS dispatch_channel),
-                :attempt_no
+                CAST(:municipality_id AS uuid),
+                CAST(:channel AS dispatch_channel),
+                :attempt_no,
+                CAST(:status AS dispatch_attempt_status),
+                :provider_request_id
             )
             """),
         {
@@ -213,6 +220,9 @@ async def crea_dispatch(
             "report_id": str(report_id),
             "municipality_id": str(municipality_id),
             "attempt_no": attempt_no,
+            "channel": channel,
+            "status": status,
+            "provider_request_id": provider_request_id,
         },
     )
     return identificativo

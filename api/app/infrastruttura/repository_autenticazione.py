@@ -26,6 +26,8 @@ class UtentePersistito:
     locale: str
     privacy_policy_version: str
     tos_version: str
+    is_operatore: bool
+    municipality_id: uuid.UUID | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,7 +55,8 @@ class SessioneAttiva:
 _SQL_UTENTE = """
     SELECT id, nickname, email_enc, email_key_id, email_lookup_hash,
            password_hash, email_verified_at, status, created_at, last_login_at,
-           locale, privacy_policy_version, tos_version
+           locale, privacy_policy_version, tos_version, is_operatore,
+           municipality_id
     FROM "user"
 """
 
@@ -513,6 +516,8 @@ def _mappa_utente(riga: Mapping[str, object]) -> UtentePersistito:
         locale=riga["locale"],
         privacy_policy_version=riga["privacy_policy_version"],
         tos_version=riga["tos_version"],
+        is_operatore=bool(riga["is_operatore"]),
+        municipality_id=riga["municipality_id"],
     )
 
 

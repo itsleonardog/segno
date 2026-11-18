@@ -285,6 +285,39 @@ async def aggiorna_stato(
     )
 
 
+async def elenca_segnalazioni_amministrazione(
+    connessione: AsyncConnection,
+    *,
+    municipality_id: uuid.UUID,
+    stato: str | None,
+    cursore: uuid.UUID | None,
+    limite: int,
+) -> list[Segnalazione]:
+    """Restituisce una pagina di segnalazioni del comune per il pannello operatore."""
+    condizioni = [
+        "deleted_at IS NULL",
+        "municipality_id = CAST(:municipality_id AS uuid)",
+    ]
+    parametri: dict[str, object] = {
+        "limite": limite,
+        "municipality_id": str(municipality_id),
+    }
+    if stato is not None:
+        condizioni.append("status = CAST(:stato AS report_status)")
+        parametri["stato"] = stato
+    if cursore is not None:
+        condizioni.append("id < CAST(:cursore AS uuid)")
+        parametri["cursore"] = str(cursore)
+    esito = await connessione.execute(
+        text(
+            f"{_SQL_SEGNALAZIONE} WHERE {' AND '.join(condizioni)} "
+            "ORDER BY id DESC LIMIT :limite"
+        ),
+        parametri,
+    )
+    return [_mappa_segnalazione(riga) for riga in esito.mappings().all()]
+
+
 async def elenca_segnalazioni_pubbliche(
     connessione: AsyncConnection,
     *,

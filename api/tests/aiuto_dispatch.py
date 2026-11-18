@@ -35,6 +35,7 @@ ADATTATORE_NON_USATO = "https://api.comune.test/v2/requests"
 class InvioEmailFinto:
     message_id: str = "<dispatch-test@segnalazioni.test>"
     messaggi: list[tuple[str, ContenutoEmail]] = field(default_factory=list)
+    notifiche_inviate: list[tuple[str, str, str]] = field(default_factory=list)
     errore_da_sollevare: Exception | None = None
 
     def invia_segnalazione(
@@ -46,6 +47,11 @@ class InvioEmailFinto:
             raise self.errore_da_sollevare
         self.messaggi.append((destinatario, contenuto))
         return self.message_id
+
+    def invia(self, destinatario: str, oggetto: str, corpo: str) -> None:
+        if self.errore_da_sollevare is not None:
+            raise self.errore_da_sollevare
+        self.notifiche_inviate.append((destinatario, oggetto, corpo))
 
 
 @dataclass

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import uuid
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 
 from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from app.infrastruttura import repository_autenticazione
 from app.infrastruttura.cifratura_email import (
     CifrarioEmailEnvelope,
     EmailCipher,
@@ -16,6 +19,8 @@ from app.infrastruttura.configurazione import (
 )
 from app.infrastruttura.database import transazione_con_contesto
 from app.infrastruttura.email_sender import EmailSender, LoggingEmailSender
+from app.infrastruttura.errori import ErroreApi
+from app.infrastruttura.middleware_auth import get_utente_autenticato
 
 NOME_SEGRETO_KEK = "CIVIC_EMAIL_KEK"
 NOME_SEGRETO_PEPPER = "CIVIC_EMAIL_LOOKUP_PEPPER"
@@ -47,6 +52,13 @@ def get_email_sender() -> EmailSender:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class ContestoOperatore:
+    connessione: AsyncConnection
+    utente_id: uuid.UUID
+    municipality_id: uuid.UUID
+
+
 async def connessione_pubblica(
     request: Request,
 ) -> AsyncIterator[AsyncConnection]:
@@ -70,3 +82,42 @@ async def connessione_piattaforma(
         scope="platform",
     ) as connessione:
         yield connessione
+
+
+async def contesto_operatore(
+    request: Request,
+) -> AsyncIterator[ContestoOperatore]:
+    """Apre una transazione amministrativa solo per operatori con un comune."""
+    utente_id = get_utente_autenticato(request)
+    async with transazione_con_contesto(
+        request.app.state.motore,
+        scope="platform",
+        user_id=str(utente_id),
+    ) as connessione:
+        utente = await repository_autenticazione.trova_utente_per_id(
+            connessione,
+            utente_id,
+        )
+        if utente is None or not utente.is_operatore:
+            raise ErroreApi(
+                status=403,
+                titolo="Operazione non consentita",
+                dettaglio=(
+                    "Questa area è riservata agli operatori comunali. "
+                    "Effettua l'accesso con un account operatore."
+                ),
+            )
+        if utente.municipality_id is None:
+            raise ErroreApi(
+                status=403,
+                titolo="Comune non associato",
+                dettaglio=(
+                    "L'account operatore non è associato a un comune. "
+                    "Chiedi di completare la configurazione."
+                ),
+            )
+        yield ContestoOperatore(
+            connessione=connessione,
+            utente_id=utente_id,
+            municipality_id=utente.municipality_id,
+        )

@@ -9,7 +9,9 @@ import { mappaStatoApi } from '../dominio/segnalazione';
 
 import { richiediApi } from './clientApi';
 
-type SegnalazioneApi = {
+export type StatoApiSegnalazione = 'open' | 'in_progress' | 'resolved' | 'closed';
+
+export type SegnalazioneApi = {
   id: string;
   public_ref: string;
   municipality_id: string | null;
@@ -81,6 +83,26 @@ export async function inviaSegnalazione(
   return mappaSegnalazione(segnalazioneApi);
 }
 
+export async function cambiaStatoSegnalazione(
+  id: string,
+  stato: StatoApiSegnalazione,
+  notaPubblica: string | null,
+  token: string,
+): Promise<Segnalazione> {
+  const segnalazioneApi = await richiediApi<SegnalazioneApi>(
+    `/v1/reports/${id}/status`,
+    {
+      metodo: 'PATCH',
+      token,
+      corpo: {
+        status: stato,
+        note_public: notaPubblica,
+      },
+    },
+  );
+  return mappaSegnalazione(segnalazioneApi);
+}
+
 export async function modificaSegnalazione(
   id: string,
   dati: DatiModificaSegnalazione,
@@ -104,7 +126,7 @@ export async function modificaSegnalazione(
   return mappaSegnalazione(segnalazioneApi);
 }
 
-function mappaSegnalazione(segnalazioneApi: SegnalazioneApi): Segnalazione {
+export function mappaSegnalazione(segnalazioneApi: SegnalazioneApi): Segnalazione {
   return {
     id: segnalazioneApi.id,
     riferimentoPubblico: segnalazioneApi.public_ref,
