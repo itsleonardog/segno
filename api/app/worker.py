@@ -31,11 +31,16 @@ from app.infrastruttura.configurazione import (
 )
 from app.infrastruttura.database import crea_motore, transazione_con_contesto
 from app.infrastruttura.dipendenze import get_cifrario_email, get_email_sender
+from app.infrastruttura.logging_sicuro import installa_redazione_log
 from app.infrastruttura.outbox import (
     EventoOutbox,
     leggi_eventi_da_processare,
     marca_evento_processato,
     registra_errore_evento,
+)
+from app.infrastruttura.repository_retention import (
+    EsitoRetention,
+    pulisci_dati_scaduti,
 )
 
 logger = logging.getLogger(__name__)
@@ -154,6 +159,12 @@ async def _elabora_singolo_evento(
     return True
 
 
+async def esegui_retention(motore: AsyncEngine) -> EsitoRetention:
+    """Elimina i dati scaduti e restituisce il conteggio delle righe rimosse."""
+    async with transazione_con_contesto(motore, scope="system") as connessione:
+        return await pulisci_dati_scaduti(connessione)
+
+
 async def ciclo_worker(
     motore: AsyncEngine,
     gestore: GestoreEventi,
@@ -162,10 +173,12 @@ async def ciclo_worker(
     limite: int = LIMITE_EVENTI_PER_CICLO,
     sincronizzatore: SincronizzatoreOpen311 | None = None,
     intervallo_sincronizzazione_secondi: float | None = None,
+    intervallo_retention_secondi: float | None = None,
 ) -> None:
-    """Esegue il polling dell'outbox e la sincronizzazione Open311 periodica."""
+    """Esegue polling dell'outbox, sincronizzazione Open311 e retention periodica."""
     logger.info("worker_started", extra={"pausa_secondi": pausa_secondi})
     prossima_sincronizzazione = 0.0
+    prossima_retention = 0.0
     while True:
         try:
             elaborati = await elabora_eventi_in_sospeso(
@@ -198,8 +211,37 @@ async def ciclo_worker(
             prossima_sincronizzazione = (
                 time.monotonic() + intervallo_sincronizzazione_secondi
             )
+        if (
+            intervallo_retention_secondi is not None
+            and time.monotonic() >= prossima_retention
+        ):
+            await _esegui_retention_con_log(motore)
+            # L'appuntamento avanza anche in caso di guasto: un errore
+            # persistente non deve trasformare la retention in un ciclo continuo.
+            prossima_retention = time.monotonic() + intervallo_retention_secondi
         if elaborati == 0:
             await asyncio.sleep(pausa_secondi)
+
+
+async def _esegui_retention_con_log(motore: AsyncEngine) -> None:
+    try:
+        esito = await esegui_retention(motore)
+    except SQLAlchemyError as errore:
+        logger.error(
+            "retention_cycle_failed",
+            extra={"error_type": type(errore).__name__},
+        )
+        return
+    logger.info(
+        "retention_cycle_completed",
+        extra={
+            "refresh_token_rimossi": esito.refresh_token_rimossi,
+            "token_verifica_rimossi": esito.token_verifica_rimossi,
+            "token_reset_rimossi": esito.token_reset_rimossi,
+            "notifiche_rimosse": esito.notifiche_rimosse,
+            "idempotenze_rimosse": esito.idempotenze_rimosse,
+        },
+    )
 
 
 def crea_gestore_predefinito(
@@ -250,6 +292,9 @@ async def esegui_worker() -> None:
             intervallo_sincronizzazione_secondi=(
                 configurazione_dispatch.intervallo_sincronizzazione_open311_secondi
             ),
+            intervallo_retention_secondi=(
+                configurazione_dispatch.intervallo_retention_secondi
+            ),
         )
     finally:
         await motore.dispose()
@@ -260,6 +305,7 @@ def main() -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
+    installa_redazione_log()
     asyncio.run(esegui_worker())
 
 

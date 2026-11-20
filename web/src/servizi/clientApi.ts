@@ -1,4 +1,4 @@
-type MetodoHttp = 'GET' | 'POST' | 'PATCH';
+type MetodoHttp = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
 type OpzioniRichiesta = {
   metodo?: MetodoHttp;
@@ -66,6 +66,27 @@ export async function richiediApi<TRisposta>(
     return undefined as TRisposta;
   }
   return (await risposta.json()) as TRisposta;
+}
+
+export async function richiediFileApi(
+  percorso: string,
+  opzioni: { token?: string | null } = {},
+): Promise<Blob> {
+  const intestazioni: Record<string, string> = {};
+  if (opzioni.token) {
+    intestazioni.Authorization = `Bearer ${opzioni.token}`;
+  }
+
+  const risposta = await fetch(`${URL_BASE_API}${percorso}`, {
+    method: 'GET',
+    headers: intestazioni,
+    cache: 'no-store',
+  });
+
+  if (!risposta.ok) {
+    throw await costruisciErroreApi(risposta);
+  }
+  return risposta.blob();
 }
 
 async function costruisciErroreApi(risposta: Response): Promise<ErroreApi> {

@@ -1,6 +1,6 @@
 import type { ProfiloUtente } from '../dominio/utente';
 
-import { richiediApi } from './clientApi';
+import { richiediApi, richiediFileApi } from './clientApi';
 
 export type Sessione = {
   tokenAccesso: string;
@@ -74,6 +74,18 @@ export async function esci(token: string, tokenRinnovo: string): Promise<void> {
     metodo: 'POST',
     token,
     corpo: { refresh_token: tokenRinnovo },
+  });
+}
+
+export async function scaricaDatiPersonali(token: string): Promise<Blob> {
+  return richiediFileApi('/v1/me/export', { token });
+}
+
+export async function eliminaAccount(token: string, password: string): Promise<void> {
+  await richiediApi<void>('/v1/me', {
+    metodo: 'DELETE',
+    token,
+    corpo: { password },
   });
 }
 

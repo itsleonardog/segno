@@ -87,3 +87,7 @@ class RichiestaAggiornamentoMe(BaseModel):
         pattern=PATTERN_NICKNAME,
     )
     locale: str | None = Field(default=None, pattern=PATTERN_LOCALE)
+
+
+class RichiestaCancellazioneAccount(BaseModel):
+    password: str = Field(min_length=1)

@@ -15,10 +15,10 @@ from app.infrastruttura.identificativo import genera_identificativo_uuid7
 class UtentePersistito:
     id: uuid.UUID
     nickname: str
-    email_enc: bytes
-    email_key_id: str
-    email_lookup_hash: str
-    password_hash: str
+    email_enc: bytes | None
+    email_key_id: str | None
+    email_lookup_hash: str | None
+    password_hash: str | None
     email_verified_at: datetime | None
     status: str
     created_at: datetime
@@ -502,10 +502,11 @@ async def registra_audit(
 
 
 def _mappa_utente(riga: Mapping[str, object]) -> UtentePersistito:
+    email_enc = riga["email_enc"]
     return UtentePersistito(
         id=riga["id"],
         nickname=riga["nickname"],
-        email_enc=bytes(riga["email_enc"]),
+        email_enc=bytes(email_enc) if email_enc is not None else None,
         email_key_id=riga["email_key_id"],
         email_lookup_hash=riga["email_lookup_hash"],
         password_hash=riga["password_hash"],

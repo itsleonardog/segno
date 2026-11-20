@@ -33,7 +33,9 @@ export function Intestazione() {
                   Pannello operatore
                 </Link>
               ) : null}
-              <span className="px-2 text-slate-600">{profilo.nickname}</span>
+              <Link href="/me" className={STILE_COLLEGAMENTO_NEUTRO}>
+                {profilo.nickname}
+              </Link>
               <button
                 type="button"
                 onClick={esci}

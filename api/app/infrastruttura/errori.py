@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from http import HTTPStatus
 
 from fastapi import FastAPI, Request
@@ -9,8 +10,13 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.dominio.autenticazione import ErroreRiusoToken
 
+logger = logging.getLogger(__name__)
+
 TIPO_PROBLEMA_PREDEFINITO = "about:blank"
 DETTAGLIO_RIUSO_REFRESH = "La sessione non è più valida. Effettua di nuovo l'accesso."
+DETTAGLIO_ERRORE_INTERNO = (
+    "Il servizio non è riuscito a completare la richiesta. Riprova più tardi."
+)
 
 MESSAGGI_HTTP: dict[int, tuple[str, str]] = {
     HTTPStatus.NOT_FOUND: (
@@ -75,6 +81,7 @@ def registra_gestori_errori(applicazione: FastAPI) -> None:
     applicazione.add_exception_handler(ErroreRiusoToken, _gestisci_riuso_refresh)
     applicazione.add_exception_handler(RequestValidationError, _gestisci_validazione)
     applicazione.add_exception_handler(StarletteHTTPException, _gestisci_errore_http)
+    applicazione.add_exception_handler(Exception, _gestisci_errore_interno)
 
 
 async def _gestisci_errore_api(request: Request, errore: ErroreApi) -> JSONResponse:
@@ -121,6 +128,28 @@ async def _gestisci_validazione(
                 "I dati inviati non rispettano il formato richiesto. "
                 "Controlla i campi e riprova."
             ),
+            instance=request.url.path,
+        ),
+    )
+
+
+async def _gestisci_errore_interno(
+    request: Request,
+    errore: Exception,
+) -> JSONResponse:
+    # Il dettaglio tecnico resta nei log, la risposta espone solo il problema.
+    logger.error(
+        "unhandled_request_error",
+        extra={"error_type": type(errore).__name__, "path": request.url.path},
+        exc_info=errore,
+    )
+    return JSONResponse(
+        status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+        media_type="application/problem+json",
+        content=corpo_problema(
+            status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            titolo="Errore interno",
+            dettaglio=DETTAGLIO_ERRORE_INTERNO,
             instance=request.url.path,
         ),
     )

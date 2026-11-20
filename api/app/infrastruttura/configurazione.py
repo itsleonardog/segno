@@ -17,8 +17,14 @@ URL_PUBBLICA_PREDEFINITA = "https://segnalazioni.example"
 MITTENTE_PREDEFINITO = "segnalazioni@segno.example"
 PAUSA_WORKER_PREDEFINITA_SECONDI = 5.0
 INTERVALLO_SINCRONIZZAZIONE_OPEN311_PREDEFINITO_SECONDI = 300.0
+INTERVALLO_RETENTION_PREDEFINITO_SECONDI = 86400.0
 PREFISSO_SEGRETO_OPEN311_PREDEFINITO = "CIVIC_OPEN311_KEY_"
 ORIGINI_CORS_PREDEFINITE = "http://localhost:3000"
+
+LIMITE_LOGIN_PREDEFINITO = 5
+LIMITE_REGISTRAZIONE_PREDEFINITO = 5
+LIMITE_SEGNALAZIONI_PREDEFINITO = 3
+LIMITE_GEOCODING_PREDEFINITO = 10
 
 # In dev la KEK e il pepper sono derivati da costanti note: il materiale di
 # chiave reale arriva dal KMS in Fase 5 e non deve mai essere versionato.
@@ -52,7 +58,16 @@ class ConfigurazioneDispatch:
     indirizzo_mittente: str
     pausa_worker_secondi: float
     intervallo_sincronizzazione_open311_secondi: float
+    intervallo_retention_secondi: float
     prefisso_segreto_open311: str
+
+
+@dataclass(frozen=True, slots=True)
+class ConfigurazioneRateLimit:
+    login_per_minuto: int
+    registrazione_per_minuto: int
+    segnalazioni_per_minuto: int
+    geocoding_per_minuto: int
 
 
 def leggi_configurazione_database() -> ConfigurazioneDatabase:
@@ -101,8 +116,41 @@ def leggi_configurazione_dispatch() -> ConfigurazioneDispatch:
                 str(INTERVALLO_SINCRONIZZAZIONE_OPEN311_PREDEFINITO_SECONDI),
             )
         ),
+        intervallo_retention_secondi=float(
+            os.environ.get(
+                "CIVIC_RETENTION_SECONDI",
+                str(INTERVALLO_RETENTION_PREDEFINITO_SECONDI),
+            )
+        ),
         prefisso_segreto_open311=os.environ.get(
             "CIVIC_OPEN311_KEY_PREFISSO", PREFISSO_SEGRETO_OPEN311_PREDEFINITO
+        ),
+    )
+
+
+def leggi_configurazione_rate_limit() -> ConfigurazioneRateLimit:
+    """Restituisce i limiti di frequenza applicati dal middleware."""
+    return ConfigurazioneRateLimit(
+        login_per_minuto=int(
+            os.environ.get("CIVIC_RATE_LIMIT_LOGIN", str(LIMITE_LOGIN_PREDEFINITO))
+        ),
+        registrazione_per_minuto=int(
+            os.environ.get(
+                "CIVIC_RATE_LIMIT_REGISTRAZIONE",
+                str(LIMITE_REGISTRAZIONE_PREDEFINITO),
+            )
+        ),
+        segnalazioni_per_minuto=int(
+            os.environ.get(
+                "CIVIC_RATE_LIMIT_SEGNALAZIONI",
+                str(LIMITE_SEGNALAZIONI_PREDEFINITO),
+            )
+        ),
+        geocoding_per_minuto=int(
+            os.environ.get(
+                "CIVIC_RATE_LIMIT_GEOCODING",
+                str(LIMITE_GEOCODING_PREDEFINITO),
+            )
         ),
     )
 

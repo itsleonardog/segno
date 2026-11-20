@@ -9,15 +9,23 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.infrastruttura.configurazione import (
     leggi_configurazione_database,
+    leggi_configurazione_rate_limit,
     leggi_origini_consentite,
 )
 from app.infrastruttura.database import crea_motore
 from app.infrastruttura.errori import registra_gestori_errori
+from app.infrastruttura.logging_sicuro import installa_redazione_log
 from app.infrastruttura.middleware_auth import MiddlewareAutenticazione
+from app.infrastruttura.rate_limit import (
+    MiddlewareRateLimit,
+    componi_regole,
+    crea_limitatore,
+)
+from app.infrastruttura.sicurezza_http import MiddlewareIntestazioniSicurezza
 from app.presentazione import admin, auth, categorie, geo, me, notifiche, segnalazioni
 
 DESCRIZIONE_APPLICAZIONE = "API della piattaforma di segnalazione civica multi-comune."
-METODI_CORS_CONSENTITI = ["GET", "POST", "PATCH", "OPTIONS"]
+METODI_CORS_CONSENTITI = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
 INTESTAZIONI_CORS_CONSENTITE = ["Authorization", "Content-Type", "Idempotency-Key"]
 
 
@@ -46,6 +54,17 @@ def crea_app(*, motore: AsyncEngine | None = None) -> FastAPI:
         applicazione.state.motore = motore
 
     registra_gestori_errori(applicazione)
+    installa_redazione_log()
+    limitatore = crea_limitatore()
+    applicazione.state.limitatore = limitatore
+    # L'ordine di registrazione è inverso rispetto all'esecuzione: autenticazione
+    # precede il limite per utente e le intestazioni coprono anche il 429.
+    applicazione.add_middleware(
+        MiddlewareRateLimit,
+        limitatore=limitatore,
+        regole=componi_regole(leggi_configurazione_rate_limit()),
+    )
+    applicazione.add_middleware(MiddlewareIntestazioniSicurezza)
     applicazione.add_middleware(MiddlewareAutenticazione)
     applicazione.add_middleware(
         CORSMiddleware,
