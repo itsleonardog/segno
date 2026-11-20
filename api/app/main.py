@@ -22,7 +22,16 @@ from app.infrastruttura.rate_limit import (
     crea_limitatore,
 )
 from app.infrastruttura.sicurezza_http import MiddlewareIntestazioniSicurezza
-from app.presentazione import admin, auth, categorie, geo, me, notifiche, segnalazioni
+from app.presentazione import (
+    admin,
+    auth,
+    categorie,
+    geo,
+    me,
+    notifiche,
+    salute,
+    segnalazioni,
+)
 
 DESCRIZIONE_APPLICAZIONE = "API della piattaforma di segnalazione civica multi-comune."
 METODI_CORS_CONSENTITI = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
@@ -72,6 +81,7 @@ def crea_app(*, motore: AsyncEngine | None = None) -> FastAPI:
         allow_methods=METODI_CORS_CONSENTITI,
         allow_headers=INTESTAZIONI_CORS_CONSENTITE,
     )
+    applicazione.include_router(salute.router)
     applicazione.include_router(auth.router, prefix="/v1")
     applicazione.include_router(me.router, prefix="/v1")
     applicazione.include_router(categorie.router, prefix="/v1")

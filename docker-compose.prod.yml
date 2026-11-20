@@ -1,0 +1,123 @@
+name: segno-prod
+
+x-ambiente-api: &ambiente-api
+  CIVIC_ENV: ${CIVIC_ENV:-production}
+  CIVIC_DATABASE_URL: postgresql+asyncpg://${CIVIC_DB_USER:-postgres}:${CIVIC_DB_PASSWORD:-postgres}@db:5432/${CIVIC_DB_NAME:-civic}
+  CIVIC_DATABASE_URL_APP: postgresql+asyncpg://civic_app:${CIVIC_APP_PASSWORD:-civic_app}@db:5432/${CIVIC_DB_NAME:-civic}
+  CIVIC_APP_PASSWORD: ${CIVIC_APP_PASSWORD:-civic_app}
+  CIVIC_MIGRATOR_PASSWORD: ${CIVIC_MIGRATOR_PASSWORD:-civic_migrator}
+  # I valori predefiniti servono solo allo stack locale: in produzione vanno
+  # sostituiti con i segreti reali passati dall'ambiente.
+  CIVIC_JWT_SECRET: ${CIVIC_JWT_SECRET:-dev-only-jwt-secret-0123456789abcdef}
+  CIVIC_EMAIL_KEK: ${CIVIC_EMAIL_KEK:-MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
+  CIVIC_EMAIL_LOOKUP_PEPPER: ${CIVIC_EMAIL_LOOKUP_PEPPER:-ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=}
+  CIVIC_URL_PUBBLICA_BASE: ${CIVIC_URL_PUBBLICA_BASE:-http://localhost:3000}
+  CIVIC_EMAIL_MITTENTE: ${CIVIC_EMAIL_MITTENTE:-segnalazioni@segno.example}
+  CIVIC_CORS_ORIGINS: ${CIVIC_CORS_ORIGINS:-http://localhost:3000}
+  CIVIC_WORKER_PAUSA_SECONDI: ${CIVIC_WORKER_PAUSA_SECONDI:-5}
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: ${CIVIC_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${CIVIC_DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${CIVIC_DB_NAME:-civic}
+    volumes:
+      - dati_db:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${CIVIC_DB_USER:-postgres} -d ${CIVIC_DB_NAME:-civic}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    environment: *ambiente-api
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    environment: *ambiente-api
+    command:
+      [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+      ]
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    environment: *ambiente-api
+    command: ["python", "-m", "app.worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${CIVIC_API_PUBBLICA_URL:-http://localhost:8000}
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000').then((risposta) => process.exit(risposta.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  dati_db:

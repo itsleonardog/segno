@@ -44,7 +44,11 @@ puntare a un'altra API. Le origini ammesse dal backend si configurano con
 | `make web-build` | Compila il frontend per la produzione |
 | `make test-db-up` | Avvia PostgreSQL 16 con PostGIS su `localhost:55432` |
 | `make test-database` | Avvia il database di test ed esegue pytest |
+| `make test-e2e` | Avvia il database, applica le migrazioni ed esegue Playwright |
 | `make test-db-down` | Ferma il database di test e rimuove i volumi |
+| `make prod-up` | Costruisce e avvia lo stack con `docker-compose.prod.yml` |
+| `make prod-down` | Ferma lo stack di produzione e rimuove i volumi |
+| `make prod-logs` | Segue i log dello stack di produzione |
 
 ## Database di test
 
@@ -93,6 +97,50 @@ registrato in `report_dispatch.next_attempt_at`. Le variabili di ambiente
 rilevanti sono `CIVIC_DATABASE_URL_APP`, `CIVIC_WORKER_PAUSA_SECONDI`,
 `CIVIC_URL_PUBBLICA_BASE`, `CIVIC_EMAIL_MITTENTE`, `CIVIC_EMAIL_KEK` e
 `CIVIC_OPEN311_KEY_<RIFERIMENTO>` per le API key dei comuni.
+
+## Produzione con Docker
+
+Lo stack completo è descritto in `docker-compose.prod.yml`: PostgreSQL con
+PostGIS, applicazione delle migrazioni, API, worker e frontend Next.js in
+modalità `standalone`. Copia `.env.example` in `.env` e sostituisci i segreti
+prima di avviare lo stack:
+
+```bash
+cp .env.example .env
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+I valori predefiniti di `.env.example` servono solo allo stack locale. In
+produzione `CIVIC_JWT_SECRET`, `CIVIC_EMAIL_KEK` e
+`CIVIC_EMAIL_LOOKUP_PEPPER` vanno forniti dall'ambiente e non versionati.
+
+L'API espone `GET /health` per la liveness e `GET /health/ready` per la
+readiness; il secondo verifica la connessione al database.
+
+## Test end-to-end
+
+I test Playwright stanno in `web/e2e/` e simulano il flusso del cittadino:
+registrazione, accesso, selezione del punto sulla mappa, invio della
+segnalazione e apertura del dettaglio. Dopo aver avviato il database con
+`make test-db-up` e applicato le migrazioni, esegui:
+
+```bash
+cd web && npm run test:e2e
+```
+
+La prima volta installa il browser Chromium con
+`cd web && npx playwright install chromium`. In alternativa `make test-e2e`
+esegue in sequenza database, migrazioni e test. Playwright avvia API e frontend
+come processi di supporto; imposta `PLAYWRIGHT_BASE_URL` per usare servizi già
+in esecuzione.
+
+## Integrazione continua
+
+La pipeline in `.github/workflows/ci.yml` gira su push e pull request verso
+`main`. Il job `test-backend` esegue migrazioni, `ruff check` e `pytest` con un
+database PostGIS; `test-frontend` esegue `typecheck`, `lint` e `build`;
+`test-e2e` avvia lo stack di test ed esegue Playwright. I segreti usati in CI
+sono valori fittizi passati come variabili d'ambiente.
 
 ## Stile del codice
 
