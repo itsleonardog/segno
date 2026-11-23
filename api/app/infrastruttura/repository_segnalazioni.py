@@ -54,23 +54,6 @@ async def categoria_e_attiva(
     return bool(esito.scalar_one())
 
 
-async def utente_e_operatore(
-    connessione: AsyncConnection,
-    user_id: uuid.UUID,
-) -> bool:
-    """Indica se l'utente ha il ruolo di operatore comunale."""
-    esito = await connessione.execute(
-        text("""
-            SELECT COALESCE(
-                (SELECT is_operatore FROM "user" WHERE id = CAST(:user_id AS uuid)),
-                false
-            )
-            """),
-        {"user_id": str(user_id)},
-    )
-    return bool(esito.scalar_one())
-
-
 async def inserisci_segnalazione(
     connessione: AsyncConnection,
     *,

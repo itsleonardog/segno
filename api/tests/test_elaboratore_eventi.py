@@ -208,7 +208,7 @@ async def test_fallback_email(
     assert destinatario == EMAIL_FALLBACK_DI_PROVA
     assert RIFERIMENTO_PUBBLICO_DI_PROVA in contenuto.oggetto
     assert (
-        f"https://segnalazioni.test/segnalazioni/{RIFERIMENTO_PUBBLICO_DI_PROVA}"
+        f"https://segnalazioni.test/reports/{RIFERIMENTO_PUBBLICO_DI_PROVA}"
         in contenuto.corpo
     )
     assert "45.050000, 9.050000" in contenuto.corpo

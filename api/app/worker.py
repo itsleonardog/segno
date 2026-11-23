@@ -240,6 +240,8 @@ async def _esegui_retention_con_log(motore: AsyncEngine) -> None:
             "token_reset_rimossi": esito.token_reset_rimossi,
             "notifiche_rimosse": esito.notifiche_rimosse,
             "idempotenze_rimosse": esito.idempotenze_rimosse,
+            "dispatch_rimossi": esito.dispatch_rimossi,
+            "audit_log_rimossi": esito.audit_log_rimossi,
         },
     )
 

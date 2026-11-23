@@ -20,7 +20,7 @@ async def test_notifica_creata_al_cambio_stato(
     categoria_altro: str,
 ) -> None:
     async with motore_amministratore.begin() as connessione:
-        await crea_comune(connessione, confine=CONFINE_COMUNE_A)
+        comune = await crea_comune(connessione, confine=CONFINE_COMUNE_A)
     token_autore, autore_id = await crea_utente_autenticato(
         client_auth,
         motore_amministratore,
@@ -29,6 +29,7 @@ async def test_notifica_creata_al_cambio_stato(
         client_auth,
         motore_amministratore,
         operatore=True,
+        municipality_id=comune,
     )
     creata = await crea_segnalazione_api(client_auth, token_autore, categoria_altro)
     report_id = creata.json()["id"]

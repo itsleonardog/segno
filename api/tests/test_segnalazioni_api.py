@@ -246,11 +246,12 @@ async def test_cambio_stato_operatore(
     categoria_altro: str,
 ) -> None:
     async with motore_amministratore.begin() as connessione:
-        await crea_comune(connessione, confine=CONFINE_COMUNE_A)
+        comune = await crea_comune(connessione, confine=CONFINE_COMUNE_A)
     token, _ = await crea_utente_autenticato(
         client_auth,
         motore_amministratore,
         operatore=True,
+        municipality_id=comune,
     )
     creata = await crea_segnalazione_api(client_auth, token, categoria_altro)
     assert creata.status_code == 201, creata.text
@@ -324,10 +325,13 @@ async def test_cambio_stato_transizione_non_valida(
     motore_amministratore: AsyncEngine,
     categoria_altro: str,
 ) -> None:
+    async with motore_amministratore.begin() as connessione:
+        comune = await crea_comune(connessione, confine=CONFINE_COMUNE_A)
     token, _ = await crea_utente_autenticato(
         client_auth,
         motore_amministratore,
         operatore=True,
+        municipality_id=comune,
     )
     creata = await crea_segnalazione_api(client_auth, token, categoria_altro)
     assert creata.status_code == 201, creata.text

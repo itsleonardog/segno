@@ -166,11 +166,11 @@ def test_componi_contenuto_email_contiene_link_e_coordinate() -> None:
     contenuto = componi_contenuto_email(
         segnalazione,
         "Illuminazione",
-        "https://segnalazioni.test/segnalazioni/CR-2026-000123",
+        "https://segnalazioni.test/reports/CR-2026-000123",
     )
 
     assert "CR-2026-000123" in contenuto.oggetto
     assert "Illuminazione" in contenuto.corpo
     assert "Il lampione davanti al civico 4" in contenuto.corpo
-    assert "https://segnalazioni.test/segnalazioni/CR-2026-000123" in contenuto.corpo
+    assert "https://segnalazioni.test/reports/CR-2026-000123" in contenuto.corpo
     assert "45.050000, 9.050000" in contenuto.corpo

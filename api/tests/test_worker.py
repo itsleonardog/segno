@@ -135,6 +135,7 @@ async def test_worker_invia_email_notifica(
         client_auth,
         motore_amministratore,
         operatore=True,
+        municipality_id=comune,
     )
     async with motore_amministratore.begin() as connessione:
         report_id = await crea_segnalazione(

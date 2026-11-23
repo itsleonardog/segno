@@ -8,7 +8,9 @@ from aiuto_autenticazione import intestazione_bearer
 from aiuto_segnalazioni import crea_segnalazione_api, crea_utente_autenticato
 from aiuto_tenant import (
     CONFINE_COMUNE_A,
+    CONFINE_COMUNE_B,
     POSIZIONE_COMUNE_A,
+    POSIZIONE_COMUNE_B,
     crea_comune,
     crea_dispatch,
     crea_segnalazione,
@@ -76,6 +78,50 @@ async def test_api_admin_cambio_stato(
     assert dettaglio.status_code == 200, dettaglio.text
     assert dettaglio.json()["status"] == StatoSegnalazione.IN_CORSO.value
     assert len(dettaglio.json()["status_events"]) == 2
+
+
+async def test_operatore_non_puo_modificare_segnalazione_altro_comune(
+    client_auth: httpx.AsyncClient,
+    motore_amministratore: AsyncEngine,
+    categoria_altro: str,
+) -> None:
+    async with motore_amministratore.begin() as connessione:
+        comune_operatore = await crea_comune(
+            connessione,
+            confine=CONFINE_COMUNE_A,
+        )
+        comune_segnalazione = await crea_comune(
+            connessione,
+            confine=CONFINE_COMUNE_B,
+        )
+    token_operatore, _ = await crea_utente_autenticato(
+        client_auth,
+        motore_amministratore,
+        operatore=True,
+        municipality_id=comune_operatore,
+    )
+    async with motore_amministratore.begin() as connessione:
+        report_id = await crea_segnalazione(
+            connessione,
+            municipality_id=comune_segnalazione,
+            category_id=categoria_altro,
+            public_ref="CR-2026-000890",
+            posizione=POSIZIONE_COMUNE_B,
+        )
+
+    risposta = await client_auth.patch(
+        f"/v1/reports/{report_id}/status",
+        json={"status": StatoSegnalazione.IN_CORSO.value},
+        headers=intestazione_bearer(token_operatore),
+    )
+
+    assert risposta.status_code == 403, risposta.text
+    async with motore_amministratore.connect() as connessione:
+        stato = await connessione.execute(
+            text("SELECT status FROM report WHERE id = CAST(:report_id AS uuid)"),
+            {"report_id": str(report_id)},
+        )
+    assert stato.scalar_one() == StatoSegnalazione.APERTA.value
 
 
 async def test_admin_aggiunge_nota_interna(

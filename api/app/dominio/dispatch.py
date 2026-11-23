@@ -304,4 +304,4 @@ def componi_contenuto_email(
 
 def componi_url_pubblica(url_pubblica_base: str, public_ref: str) -> str:
     """Restituisce il link permanente alla pagina pubblica della segnalazione."""
-    return f"{url_pubblica_base.rstrip('/')}/segnalazioni/{public_ref}"
+    return f"{url_pubblica_base.rstrip('/')}/reports/{public_ref}"

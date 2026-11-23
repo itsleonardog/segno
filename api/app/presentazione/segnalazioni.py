@@ -32,8 +32,10 @@ from app.dominio.segnalazione import (
 )
 from app.infrastruttura import repository_segnalazioni
 from app.infrastruttura.dipendenze import (
+    ContestoOperatore,
     connessione_piattaforma,
     connessione_pubblica,
+    contesto_operatore,
 )
 from app.infrastruttura.errori import ErroreApi
 from app.infrastruttura.idempotenza import (
@@ -66,6 +68,10 @@ ConnessionePiattaforma = Annotated[
     Depends(connessione_piattaforma),
 ]
 UtenteAutenticato = Annotated[uuid.UUID, Depends(get_utente_autenticato)]
+ContestoOperatoreDep = Annotated[
+    ContestoOperatore,
+    Depends(contesto_operatore),
+]
 
 
 @router.post(
@@ -243,23 +249,22 @@ async def modifica_segnalazione(
 async def cambia_stato_segnalazione(
     report_id: uuid.UUID,
     richiesta: RichiestaCambioStato,
-    utente_id: UtenteAutenticato,
-    connessione: ConnessionePiattaforma,
+    contesto: ContestoOperatoreDep,
 ) -> RispostaSegnalazione:
-    if not await repository_segnalazioni.utente_e_operatore(connessione, utente_id):
-        raise _operatore_richiesto()
-    segnalazione = await _ricarica_segnalazione(connessione, report_id)
+    segnalazione = await _ricarica_segnalazione(contesto.connessione, report_id)
+    if segnalazione.municipality_id != contesto.municipality_id:
+        raise _segnalazione_di_altro_comune()
     stato_precedente = StatoSegnalazione(segnalazione.status)
     _valida_transizione(stato_precedente, richiesta.status)
     await registra_cambio_stato(
-        connessione,
+        contesto.connessione,
         segnalazione,
         richiesta.status,
         actor_type="municipality",
-        actor_id=utente_id,
+        actor_id=contesto.utente_id,
         note_public=richiesta.note_public,
     )
-    aggiornata = await _ricarica_segnalazione(connessione, report_id)
+    aggiornata = await _ricarica_segnalazione(contesto.connessione, report_id)
     return _risposta_segnalazione(aggiornata)
 
 
@@ -512,13 +517,11 @@ def _coordinate_non_valide() -> ErroreApi:
     )
 
 
-def _operatore_richiesto() -> ErroreApi:
+def _segnalazione_di_altro_comune() -> ErroreApi:
     return ErroreApi(
         status=403,
         titolo="Operazione non consentita",
-        dettaglio=(
-            "Solo un operatore comunale può cambiare lo stato della segnalazione."
-        ),
+        dettaglio="La segnalazione non appartiene al tuo comune.",
     )
 
 

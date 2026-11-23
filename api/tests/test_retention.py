@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import uuid
 
-from aiuto_tenant import crea_utente
+from aiuto_tenant import (
+    CONFINE_COMUNE_A,
+    POSIZIONE_COMUNE_A,
+    crea_comune,
+    crea_segnalazione,
+    crea_utente,
+)
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -12,10 +18,24 @@ from app.worker import esegui_retention
 async def test_retention_elimina_dati_scaduti(
     motore_amministratore: AsyncEngine,
     motore_applicazione: AsyncEngine,
+    categoria_altro: str,
 ) -> None:
     async with motore_amministratore.begin() as connessione:
         utente_id = await crea_utente(connessione)
-        await _inserisci_dati_scaduti(connessione, utente_id)
+        comune = await crea_comune(connessione, confine=CONFINE_COMUNE_A)
+        report_id = await crea_segnalazione(
+            connessione,
+            municipality_id=comune,
+            category_id=categoria_altro,
+            public_ref="CR-2026-000901",
+            posizione=POSIZIONE_COMUNE_A,
+        )
+        await _inserisci_dati_scaduti(
+            connessione,
+            utente_id,
+            municipality_id=comune,
+            report_id=report_id,
+        )
 
     esito = await esegui_retention(motore_applicazione)
 
@@ -24,6 +44,8 @@ async def test_retention_elimina_dati_scaduti(
     assert esito.token_reset_rimossi == 1
     assert esito.notifiche_rimosse == 1
     assert esito.idempotenze_rimosse == 1
+    assert esito.dispatch_rimossi == 1
+    assert esito.audit_log_rimossi == 1
     assert await _conta(motore_amministratore, "refresh_token") == 0
     assert await _conta(motore_amministratore, "email_verification_token") == 0
     assert await _conta(motore_amministratore, "password_reset_token") == 0
@@ -31,9 +53,17 @@ async def test_retention_elimina_dati_scaduti(
     # La notifica non letta resta: la retention copre solo quelle lette da oltre
     # dodici mesi.
     assert await _conta(motore_amministratore, "notification") == 1
+    assert await _conta(motore_amministratore, "report_dispatch") == 1
+    assert await _conta(motore_amministratore, "audit_log") == 1
 
 
-async def _inserisci_dati_scaduti(connessione, utente_id: uuid.UUID) -> None:
+async def _inserisci_dati_scaduti(
+    connessione,
+    utente_id: uuid.UUID,
+    *,
+    municipality_id: uuid.UUID,
+    report_id: uuid.UUID,
+) -> None:
     await connessione.execute(
         text("""
             INSERT INTO refresh_token (
@@ -131,6 +161,83 @@ async def _inserisci_dati_scaduti(connessione, utente_id: uuid.UUID) -> None:
             "utente_id": str(utente_id),
             "chiave": f"chiave-{uuid.uuid4()}",
             "request_hash": str(uuid.uuid4()),
+        },
+    )
+    await _inserisci_dispatch(
+        connessione,
+        report_id=report_id,
+        municipality_id=municipality_id,
+        attempt_no=1,
+        created_at="now() - interval '25 months'",
+    )
+    await _inserisci_dispatch(
+        connessione,
+        report_id=report_id,
+        municipality_id=municipality_id,
+        attempt_no=2,
+        created_at="now() - interval '1 month'",
+    )
+    await _inserisci_audit_log(
+        connessione,
+        report_id=report_id,
+        created_at="now() - interval '25 months'",
+    )
+    await _inserisci_audit_log(
+        connessione,
+        report_id=report_id,
+        created_at="now() - interval '1 month'",
+    )
+
+
+async def _inserisci_dispatch(
+    connessione,
+    *,
+    report_id: uuid.UUID,
+    municipality_id: uuid.UUID,
+    attempt_no: int,
+    created_at: str,
+) -> None:
+    await connessione.execute(
+        text(f"""
+            INSERT INTO report_dispatch (
+                id, report_id, municipality_id, channel, attempt_no, status,
+                created_at
+            )
+            VALUES (
+                CAST(:id AS uuid), CAST(:report_id AS uuid),
+                CAST(:municipality_id AS uuid),
+                CAST('email' AS dispatch_channel), :attempt_no,
+                CAST('succeeded' AS dispatch_attempt_status), {created_at}
+            )
+            """),
+        {
+            "id": str(uuid.uuid4()),
+            "report_id": str(report_id),
+            "municipality_id": str(municipality_id),
+            "attempt_no": attempt_no,
+        },
+    )
+
+
+async def _inserisci_audit_log(
+    connessione,
+    *,
+    report_id: uuid.UUID,
+    created_at: str,
+) -> None:
+    await connessione.execute(
+        text(f"""
+            INSERT INTO audit_log (
+                id, actor_type, action, entity_type, entity_id, created_at
+            )
+            VALUES (
+                CAST(:id AS uuid), 'system', 'retention-test', 'report',
+                CAST(:report_id AS uuid), {created_at}
+            )
+            """),
+        {
+            "id": str(uuid.uuid4()),
+            "report_id": str(report_id),
         },
     )
 
